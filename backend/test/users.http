@@ -1,0 +1,23 @@
+### Создать сотрудника
+POST http://localhost:3000/api/users 
+Content-Type: application/json
+
+{
+  "fullName": "Иван Петров",
+  "email": "ivan@example.com",
+  "phone": "+37360000001",
+  "isEmployee": true
+}
+
+### Создать клиента
+POST http://localhost:3000/api/users
+Content-Type: application/json
+
+{
+  "fullName": "ООО Ромашка",
+  "email": "client@romashka.md",
+  "isClient": true
+}
+
+### Получить всех
+GET http://localhost:3000/api/users
