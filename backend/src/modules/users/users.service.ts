@@ -55,12 +55,32 @@ export class UsersService {
     if (!user) throw new NotFoundException(`User ${id} не найден`);
     return user;
   }
-
+  async findByLogin(login: string): Promise<User | null> {
+    return this.usersRepo
+        .createQueryBuilder('user')
+        .addSelect('user.passwordHash')
+        .leftJoinAndSelect('user.roles', 'role')
+        .leftJoinAndSelect('role.permissions', 'permission')
+        .where('user.email = :login OR user.phone = :login', { login })
+        .getOne();
+  }
+  async updatePasswordHash(userId: string, hash: string): Promise<void> {
+    await this.usersRepo.update({ id: userId }, { passwordHash: hash });
+  }
   async update(id: string, dto: UpdateUserDto): Promise<User> {
     const user = await this.findOne(id);
     Object.assign(user, dto);
     return this.usersRepo.save(user);
   }
+
+  async createWithHash(
+  dto: CreateUserDto,
+  passwordHash: string,
+): Promise<User> {
+  const user = await this.create(dto);
+  await this.updatePasswordHash(user.id, passwordHash);
+  return this.findOne(user.id);
+}
 
   async remove(id: string): Promise<void> {
     const user = await this.findOne(id);
