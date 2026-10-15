@@ -1,0 +1,51 @@
+### 0. Логин как chief
+# @name login
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "sergey@example.com",
+  "password": "secret12345"
+}
+
+### 1. Создать этап (замените PROJECT_ID)
+POST http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Фундамент",
+  "description": "Заливка фундамента под 5-этажный дом",
+  "deadline": "2026-12-15"
+}
+
+### 2. Список этапов
+GET http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 3. Получить один (замените STAGE_ID)
+GET http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages/ВСТАВЬТЕ_STAGE_ID
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 4. Изменить статус: draft → pending_approval
+POST http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages/ВСТАВЬТЕ_STAGE_ID/status
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "status": "pending_approval",
+  "comment": "Отправлено на утверждение"
+}
+
+### 5. Пропустить статус: draft → completed (должно быть 400)
+POST http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages/ВСТАВЬТЕ_STAGE_ID/status
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "status": "completed"
+}
+
+### 6. История статусов
+GET http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages/ВСТАВЬТЕ_STAGE_ID/history
+Authorization: Bearer {{login.response.body.accessToken}}

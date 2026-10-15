@@ -5,6 +5,7 @@ import { BullModule } from '@nestjs/bull';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ProjectsModule } from './modules/projects/projects.module';
+import { StagesModule } from './modules/stages/stages.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { ProjectsModule } from './modules/projects/projects.module';
     UsersModule,
     AuthModule,
     ProjectsModule,
+    StagesModule,
   ],
 })
 export class AppModule {}
