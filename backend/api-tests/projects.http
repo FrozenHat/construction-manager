@@ -1,0 +1,46 @@
+### 1. Логин как chief (свежий токен после назначения роли)
+# @name login
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "sergey@example.com",
+  "password": "secret12345"
+}
+
+### 2. Создать проект
+POST http://localhost:3000/api/projects
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Жилой комплекс Ромашка",
+  "description": "Строительство 5-этажного дома",
+  "address": "г. Кишинёв, ул. Строителей 15",
+  "startDate": "2026-11-01",
+  "plannedEnd": "2027-06-30"
+}
+
+### 3. Список проектов (chief видит все)
+GET http://localhost:3000/api/projects
+Authorization: Bearer {{login.response.body.accessToken}}
+
+
+
+### 4. Получить один проект (замените PROJECT_ID)
+GET http://localhost:3000/api/projects/b11b5e07-f280-4cdc-b86c-2400e8597a17
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 5. Добавить участника (замените PROJECT_ID и USER_ID)
+POST http://localhost:3000/api/projects/b11b5e07-f280-4cdc-b86c-2400e8597a17/members
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "userId": "49700faa-48e2-49e2-a952-cddc6cf30c05",
+  "roleCode": "manager"
+}
+
+### 6. Список участников
+GET http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/members
+Authorization: Bearer {{login.response.body.accessToken}}

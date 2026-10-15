@@ -8,6 +8,7 @@ Content-Type: application/json
   "password": "secret12345"
 }
 
+
 ### 2. Попытка получить список пользователей (нужно user.view)
 GET http://localhost:3000/api/users
 Authorization: Bearer {{loginNoRole.response.body.accessToken}}
