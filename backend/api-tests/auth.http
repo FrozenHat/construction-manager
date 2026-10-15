@@ -1,0 +1,30 @@
+### Регистрация
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "fullName": "Сергей Сидоров",
+  "email": "sergey@example.com",
+  "password": "secret12345"
+}
+
+### Логин
+# @name login
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "sergey@example.com",
+  "password": "secret12345"
+}
+
+### Мой профиль (через токен)
+GET http://localhost:3000/api/auth/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwZjEwYmYyMi1lYjQ2LTRkNGQtOWRhYS0xNzRjNGNmYmNjZWYiLCJlbWFpbCI6InNlcmdleUBleGFtcGxlLmNvbSIsInBob25lIjpudWxsLCJyb2xlcyI6W10sImlhdCI6MTc5MjA3Mjc0NSwiZXhwIjoxNzkyNjc3NTQ1fQ.5rRzvjdBsTHpG_QTo6ZtHYhej2jGL6tZmkB7WqDlIyM
+
+### Список пользователей БЕЗ токена — должно быть 401
+GET http://localhost:3000/api/users
+
+### Список пользователей С токеном — должно быть 200
+GET http://localhost:3000/api/users
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwZjEwYmYyMi1lYjQ2LTRkNGQtOWRhYS0xNzRjNGNmYmNjZWYiLCJlbWFpbCI6InNlcmdleUBleGFtcGxlLmNvbSIsInBob25lIjpudWxsLCJyb2xlcyI6W10sImlhdCI6MTc5MjA3Mjc0NSwiZXhwIjoxNzkyNjc3NTQ1fQ.5rRzvjdBsTHpG_QTo6ZtHYhej2jGL6tZmkB7WqDlIyM
