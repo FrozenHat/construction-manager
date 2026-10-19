@@ -8,6 +8,8 @@ import { ProjectsModule } from './modules/projects/projects.module';
 import { StagesModule } from './modules/stages/stages.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
+import { DocumentsModule  } from './modules/documents/documents.module';
+
 
 @Module({
   imports: [
@@ -48,6 +50,7 @@ import { TransactionsModule } from './modules/transactions/transactions.module';
     StagesModule,
     TasksModule,
     TransactionsModule,
+    DocumentsModule,
   ],
 })
 export class AppModule {}
