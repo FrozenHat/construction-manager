@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Project } from '../types';
+import NotificationBell from '../components/NotificationBell';
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -45,9 +46,15 @@ export default function ProjectsPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Шапка */}
       <header className="bg-white shadow">
+        
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+          
           <h1 className="text-xl font-bold text-gray-800">Мои проекты</h1>
           <div className="flex items-center gap-4">
+            <button onClick={() => navigate('/admin')} className="text-sm font-medium text-gray-700 hover:text-black">
+                Пользователи
+            </button>
+            <NotificationBell />
             <span className="text-gray-600 text-sm">{user.email}</span>
             <button onClick={handleLogout} className="text-red-500 hover:text-red-700 text-sm font-medium">
               Выйти

@@ -27,6 +27,7 @@ export class UsersService {
         'Пользователь не может быть одновременно клиентом и сотрудником',
       );
     }
+    
 
     // Проверка уникальности
     if (dto.email) {
@@ -43,6 +44,11 @@ export class UsersService {
     }
 
     const user = this.usersRepo.create(dto);
+    return this.usersRepo.save(user);
+  }
+  async removeRole(userId: string, roleCode: string): Promise<User> {
+    const user = await this.findOne(userId);
+    user.roles = user.roles?.filter(r => r.code !== roleCode) || [];
     return this.usersRepo.save(user);
   }
 

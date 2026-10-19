@@ -27,6 +27,14 @@ export class TransactionsController {
   ) {
     return this.txService.getProjectBalance(projectId, user);
   }
+  @RequirePermission('finance.view')
+  @Get()
+  findAll(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.txService.findAll(projectId, user);
+  }
 
   @RequirePermission('finance.approve')
   @Patch(':id/approve')

@@ -40,6 +40,9 @@ export class Task {
 
   @Column({ type: 'text', nullable: true })
   description: string | null;
+    // Цена, которую фирма выставляет клиенту (скрыто от исполнителя)
+  @Column({ name: 'client_price', type: 'numeric', precision: 14, scale: 2, nullable: true })
+  clientPrice: string | null;
 
   @Column({ type: 'varchar', length: 32, default: TaskStatus.DRAFT })
   status: TaskStatus;
@@ -87,7 +90,7 @@ export class Task {
   })
   contractorFee: string | null;
 
-  @Column({ type: 'char', length: 3, default: 'MDL' })
+  @Column({ type: 'char', length: 3, default: '₽' })
   currency: string;
 
   // --- Сроки ---

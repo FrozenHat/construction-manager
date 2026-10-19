@@ -32,6 +32,13 @@ export class TransactionsService {
     });
     return this.txRepo.save(tx);
   }
+    async findAll(projectId: string, user: User): Promise<Transaction[]> {
+    await this.projectsService.assertAccess(projectId, user);
+    return this.txRepo.find({
+      where: { projectId },
+      order: { createdAt: 'DESC' },
+    });
+  }
 
   // СИСТЕМНАЯ ТРАНЗАКЦИЯ (вызывается автоматически из TasksService)
   async createSystemTransaction(data: {
@@ -86,7 +93,7 @@ export class TransactionsService {
     return {
       projectId,
       balance: result.balance || '0.00',
-      currency: 'MDL',
+      currency: '₽',
     };
   }
 }

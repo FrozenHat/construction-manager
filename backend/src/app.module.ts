@@ -9,6 +9,8 @@ import { StagesModule } from './modules/stages/stages.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { DocumentsModule  } from './modules/documents/documents.module';
+import { NotificationsModule   } from './modules/notifications/notifications.module';
+
 
 
 @Module({
@@ -51,6 +53,7 @@ import { DocumentsModule  } from './modules/documents/documents.module';
     TasksModule,
     TransactionsModule,
     DocumentsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

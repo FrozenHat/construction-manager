@@ -15,6 +15,7 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { ChangeTaskStatusDto } from './dto/change-task-status.dto';
 import { TransactionsService } from '../transactions/transactions.service';
 import { TransactionCategory } from '../transactions/entities/transaction.enums';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Конечный автомат статусов задач.
@@ -70,6 +71,7 @@ export class TasksService {
     private readonly historyRepo: Repository<TaskStatusHistory>,
     private readonly stagesService: StagesService,
     private readonly transactionsService: TransactionsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(
@@ -161,7 +163,7 @@ export class TasksService {
     user: User,
   ): Promise<Task> {
     const task = await this.findOne(projectId, stageId, taskId, user);
-
+    
     const allowed = ALLOWED_TRANSITIONS[task.status];
     if (!allowed.includes(dto.status)) {
       throw new BadRequestException(
@@ -169,6 +171,7 @@ export class TasksService {
           `Разрешено: ${allowed.join(', ') || 'нет переходов'}`,
       );
     }
+    
 
     // Особые требования к переходу в PAUSED — обязательно указать причину
     if (
@@ -179,6 +182,7 @@ export class TasksService {
         'При приостановке задачи нужно указать причину (materials | finance | quality)',
       );
     }
+    
 
     const fromStatus = task.status;
     task.status = dto.status;
@@ -212,6 +216,16 @@ export class TasksService {
     }
 
     const saved = await this.tasksRepo.save(task);
+
+    // Отправка уведомления
+    if (saved.status === TaskStatus.SENT_TO_CONTRACTOR && saved.contractorId) {
+      await this.notificationsService.create(
+        saved.contractorId,
+        'Новая задача',
+        `Вам предложена задача: ${saved.name}. Пожалуйста, подтвердите готовность или откажитесь.`,
+        `/projects/${saved.projectId}`
+      );
+    }
 
     await this.historyRepo.save(
       this.historyRepo.create({

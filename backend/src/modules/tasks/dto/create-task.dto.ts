@@ -39,4 +39,8 @@ export class CreateTaskDto {
   @IsOptional()
   @IsDateString()
   deadline?: string;
+  
+  @IsOptional()
+  @IsNumberString()
+  clientPrice?: string;
 }

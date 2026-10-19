@@ -35,6 +35,12 @@ export class UsersController {
     return this.usersService.findOne(id);
   }
 
+  @RequirePermission('user.assign_role')
+  @Delete(':id/roles/:roleCode')
+  removeRole(@Param('id') id: string, @Param('roleCode') roleCode: string) {
+    return this.usersService.removeRole(id, roleCode);
+  }
+
   @RequirePermission('user.update')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateUserDto) {

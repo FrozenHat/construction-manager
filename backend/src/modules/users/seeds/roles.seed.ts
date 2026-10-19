@@ -80,4 +80,15 @@ export const ROLES_SEED: RoleSeed[] = [
       'finance.view', // ограниченный — реализуем позже на уровне ABAC
     ],
   },
+    {
+    code: 'contractor',
+    name: 'Исполнитель (маляр, плиточник и т.д.)',
+    description: 'Выполняет задачи, указывает свою стоимость',
+    permissions: [
+      'project.view', // <-- ДОБАВИТЬ
+      'stage.view',   // <-- ДОБАВИТЬ (нужно для загрузки этапов)
+      'task.view', 
+      'task.update',
+    ],
+  },
 ];

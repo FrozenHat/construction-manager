@@ -6,12 +6,14 @@ import { TasksService } from './tasks.service';
 import { TasksController } from './tasks.controller';
 import { StagesModule } from '../stages/stages.module';
 import { TransactionsModule } from '../transactions/transactions.module';
+import { NotificationsModule  } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Task, TaskStatusHistory]),
     StagesModule,
     TransactionsModule,
+    NotificationsModule,
   ],
   controllers: [TasksController],
   providers: [TasksService],
