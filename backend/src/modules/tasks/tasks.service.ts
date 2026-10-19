@@ -1,0 +1,232 @@
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Task } from './entities/task.entity';
+import { TaskStatus, PauseReason } from './entities/task-status.enum';
+import { TaskStatusHistory } from './entities/task-status-history.entity';
+import { StagesService } from '../stages/stages.service';
+import { User } from '../users/entities/user.entity';
+import { CreateTaskDto } from './dto/create-task.dto';
+import { UpdateTaskDto } from './dto/update-task.dto';
+import { ChangeTaskStatusDto } from './dto/change-task-status.dto';
+
+/**
+ * Конечный автомат статусов задач.
+ * Учитывает ТЗ: утверждение шефом, готовность прораба, согласие исполнителя,
+ * приёмку технадзором, приостановку по причине.
+ */
+const ALLOWED_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
+  [TaskStatus.DRAFT]: [
+    TaskStatus.PENDING_APPROVAL,
+    TaskStatus.CANCELLED,
+  ],
+  [TaskStatus.PENDING_APPROVAL]: [
+    TaskStatus.SENT_TO_CONTRACTOR,
+    TaskStatus.DRAFT,
+    TaskStatus.CANCELLED,
+  ],
+  [TaskStatus.SENT_TO_CONTRACTOR]: [
+    TaskStatus.IN_PROGRESS,
+    TaskStatus.PENDING_APPROVAL,
+    TaskStatus.CANCELLED,
+  ],
+  [TaskStatus.IN_PROGRESS]: [
+    TaskStatus.ON_REVIEW,
+    TaskStatus.PAUSED,
+    TaskStatus.CANCELLED,
+  ],
+  [TaskStatus.ON_REVIEW]: [
+    TaskStatus.ACCEPTED,
+    TaskStatus.REJECTED,
+  ],
+  [TaskStatus.ACCEPTED]: [
+    TaskStatus.COMPLETED,
+    TaskStatus.REJECTED,
+  ],
+  [TaskStatus.REJECTED]: [
+    TaskStatus.PAUSED,
+    TaskStatus.CANCELLED,
+  ],
+  [TaskStatus.PAUSED]: [
+    TaskStatus.IN_PROGRESS,
+    TaskStatus.CANCELLED,
+  ],
+  [TaskStatus.COMPLETED]: [],
+  [TaskStatus.CANCELLED]: [],
+};
+
+@Injectable()
+export class TasksService {
+  constructor(
+    @InjectRepository(Task)
+    private readonly tasksRepo: Repository<Task>,
+    @InjectRepository(TaskStatusHistory)
+    private readonly historyRepo: Repository<TaskStatusHistory>,
+    private readonly stagesService: StagesService,
+  ) {}
+
+  async create(
+    projectId: string,
+    stageId: string,
+    dto: CreateTaskDto,
+    user: User,
+  ): Promise<Task> {
+    // Проверка доступа к проекту + существование этапа в этом проекте
+    await this.stagesService.findOne(projectId, stageId, user);
+
+    const task = this.tasksRepo.create({
+      ...dto,
+      projectId,
+      stageId,
+      deadline: dto.deadline ? new Date(dto.deadline) : null,
+    });
+    const saved = await this.tasksRepo.save(task);
+
+    await this.historyRepo.save(
+      this.historyRepo.create({
+        taskId: saved.id,
+        fromStatus: null,
+        toStatus: saved.status,
+        changedBy: user.id,
+        comment: 'Задача создана',
+      }),
+    );
+
+    return saved;
+  }
+
+  async findAll(
+    projectId: string,
+    stageId: string,
+    user: User,
+  ): Promise<Task[]> {
+    await this.stagesService.findOne(projectId, stageId, user);
+
+    return this.tasksRepo.find({
+      where: { projectId, stageId },
+      order: { createdAt: 'ASC' },
+    });
+  }
+
+  async findOne(
+    projectId: string,
+    stageId: string,
+    taskId: string,
+    user: User,
+  ): Promise<Task> {
+    await this.stagesService.findOne(projectId, stageId, user);
+
+    const task = await this.tasksRepo.findOne({
+      where: { id: taskId, projectId, stageId },
+    });
+    if (!task) throw new NotFoundException('Задача не найдена');
+    return task;
+  }
+
+  async update(
+    projectId: string,
+    stageId: string,
+    taskId: string,
+    dto: UpdateTaskDto,
+    user: User,
+  ): Promise<Task> {
+    const task = await this.findOne(projectId, stageId, taskId, user);
+    Object.assign(task, dto);
+    if (dto.deadline) task.deadline = new Date(dto.deadline);
+    return this.tasksRepo.save(task);
+  }
+
+  async remove(
+    projectId: string,
+    stageId: string,
+    taskId: string,
+    user: User,
+  ): Promise<void> {
+    const task = await this.findOne(projectId, stageId, taskId, user);
+    await this.tasksRepo.remove(task);
+  }
+
+  async changeStatus(
+    projectId: string,
+    stageId: string,
+    taskId: string,
+    dto: ChangeTaskStatusDto,
+    user: User,
+  ): Promise<Task> {
+    const task = await this.findOne(projectId, stageId, taskId, user);
+
+    const allowed = ALLOWED_TRANSITIONS[task.status];
+    if (!allowed.includes(dto.status)) {
+      throw new BadRequestException(
+        `Недопустимый переход: ${task.status} → ${dto.status}. ` +
+          `Разрешено: ${allowed.join(', ') || 'нет переходов'}`,
+      );
+    }
+
+    // Особые требования к переходу в PAUSED — обязательно указать причину
+    if (
+      dto.status === TaskStatus.PAUSED &&
+      !dto.pauseReason
+    ) {
+      throw new BadRequestException(
+        'При приостановке задачи нужно указать причину (materials | finance | quality)',
+      );
+    }
+
+    const fromStatus = task.status;
+    task.status = dto.status;
+
+    // Автоустановка временных меток
+    if (dto.status === TaskStatus.IN_PROGRESS && !task.startedAt) {
+      task.startedAt = new Date();
+    }
+    if (
+      (dto.status === TaskStatus.COMPLETED ||
+        dto.status === TaskStatus.CANCELLED) &&
+      !task.completedAt
+    ) {
+      task.completedAt = new Date();
+    }
+
+    // Управление pause_reason
+    if (dto.status === TaskStatus.PAUSED) {
+      task.pauseReason = dto.pauseReason ?? null;
+      task.pauseComment = dto.pauseComment ?? null;
+    } else if (fromStatus === TaskStatus.PAUSED) {
+      // выходим из паузы — чистим причину
+      task.pauseReason = null;
+      task.pauseComment = null;
+    }
+
+    const saved = await this.tasksRepo.save(task);
+
+    await this.historyRepo.save(
+      this.historyRepo.create({
+        taskId: saved.id,
+        fromStatus,
+        toStatus: saved.status,
+        changedBy: user.id,
+        comment: dto.comment ?? null,
+      }),
+    );
+
+    return saved;
+  }
+
+  async getHistory(
+    projectId: string,
+    stageId: string,
+    taskId: string,
+    user: User,
+  ): Promise<TaskStatusHistory[]> {
+    await this.findOne(projectId, stageId, taskId, user);
+    return this.historyRepo.find({
+      where: { taskId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+}
