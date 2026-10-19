@@ -15,7 +15,10 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { ChangeTaskStatusDto } from './dto/change-task-status.dto';
 import { TransactionsService } from '../transactions/transactions.service';
 import { TransactionCategory } from '../transactions/entities/transaction.enums';
+
 import { NotificationsService } from '../notifications/notifications.service';
+import { AcceptTaskDto } from './dto/accept-task.dto';
+import { ProjectMember } from '../projects/entities/project-member.entity';
 
 /**
  * Конечный автомат статусов задач.
@@ -69,6 +72,7 @@ export class TasksService {
     private readonly tasksRepo: Repository<Task>,
     @InjectRepository(TaskStatusHistory)
     private readonly historyRepo: Repository<TaskStatusHistory>,
+    private readonly membersRepo: Repository<ProjectMember>,
     private readonly stagesService: StagesService,
     private readonly transactionsService: TransactionsService,
     private readonly notificationsService: NotificationsService,
@@ -100,6 +104,55 @@ export class TasksService {
         comment: 'Задача создана',
       }),
     );
+
+    return saved;
+  }
+
+    async acceptTask(
+    projectId: string,
+    stageId: string,
+    taskId: string,
+    dto: AcceptTaskDto,
+    user: User,
+  ): Promise<Task> {
+    const task = await this.findOne(projectId, stageId, taskId, user);
+
+    // Проверка, что это именно назначенный исполнитель
+    if (task.contractorId !== user.id) {
+      throw new BadRequestException('Вы не назначены исполнителем на эту задачу');
+    }
+
+    if (task.status !== TaskStatus.SENT_TO_CONTRACTOR) {
+      throw new BadRequestException('Задача находится не в том статусе для принятия');
+    }
+
+    // Фиксируем цену и меняем статус
+    task.contractorFee = dto.contractorFee;
+    task.status = TaskStatus.IN_PROGRESS;
+    task.startedAt = new Date();
+
+    const saved = await this.tasksRepo.save(task);
+
+    // Пишем в историю
+    await this.historyRepo.save(
+      this.historyRepo.create({
+        taskId: saved.id,
+        fromStatus: TaskStatus.SENT_TO_CONTRACTOR,
+        toStatus: TaskStatus.IN_PROGRESS,
+        changedBy: user.id,
+        comment: dto.comment ? `Исполнитель принял задачу. Комментарий: ${dto.comment}` : 'Исполнитель принял задачу',
+      }),
+    );
+
+    // Отправляем уведомление менеджеру
+    if (saved.managerId) {
+      await this.notificationsService.create(
+        saved.managerId,
+        'Исполнитель принял задачу',
+        `Сотрудник ${user.fullName} принял задачу "${saved.name}". Его стоимость: ${saved.contractorFee} MDL. ${dto.comment ? 'Комментарий: ' + dto.comment : ''}`,
+        `/projects/${projectId}`
+      );
+    }
 
     return saved;
   }
@@ -225,6 +278,32 @@ export class TasksService {
         `Вам предложена задача: ${saved.name}. Пожалуйста, подтвердите готовность или откажитесь.`,
         `/projects/${saved.projectId}`
       );
+    }
+    // НОВАЯ ЛОГИКА: Если работа сдана на проверку
+    if (dto.status === TaskStatus.ON_REVIEW) {
+      // 1. Уведомляем менеджера о смене статуса
+      if (saved.managerId) {
+        await this.notificationsService.create(
+          saved.managerId,
+          'Смена статуса задачи',
+          `Задача "${saved.name}" сдана исполнителем и ожидает проверки Технадзором.`,
+          `/projects/${saved.projectId}`
+        );
+      }
+
+      // 2. Ищем Технадзоров в этом проекте и отправляем им задачу
+      const supervisors = await this.membersRepo.find({
+        where: { projectId: saved.projectId, roleCode: 'supervisor', isActive: true },
+      });
+
+      for (const sup of supervisors) {
+        await this.notificationsService.create(
+          sup.userId,
+          'Требуется проверка задачи',
+          `Задача "${saved.name}" ожидает вашей проверки. Пожалуйста, осмотрите объект и составьте отчет.`,
+          `/projects/${saved.projectId}`
+        );
+      }
     }
 
     await this.historyRepo.save(

@@ -14,6 +14,7 @@ import { ChangeTaskStatusDto } from './dto/change-task-status.dto';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
+import { AcceptTaskDto } from './dto/accept-task.dto';
 
 @Controller('projects/:projectId/stages/:stageId/tasks')
 export class TasksController {
@@ -28,6 +29,17 @@ export class TasksController {
     @CurrentUser() user: User,
   ) {
     return this.tasksService.create(projectId, stageId, dto, user);
+  }
+   @RequirePermission('task.update')
+  @Post(':id/accept')
+  acceptTask(
+    @Param('projectId') projectId: string,
+    @Param('stageId') stageId: string,
+    @Param('id') id: string,
+    @Body() dto: AcceptTaskDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.tasksService.acceptTask(projectId, stageId, id, dto, user);
   }
 
   @RequirePermission('task.view')

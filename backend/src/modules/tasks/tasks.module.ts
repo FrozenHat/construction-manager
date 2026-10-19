@@ -7,10 +7,12 @@ import { TasksController } from './tasks.controller';
 import { StagesModule } from '../stages/stages.module';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { NotificationsModule  } from '../notifications/notifications.module';
+import { ProjectMember } from '../projects/entities/project-member.entity';
+
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Task, TaskStatusHistory]),
+    TypeOrmModule.forFeature([Task, TaskStatusHistory,ProjectMember]),
     StagesModule,
     TransactionsModule,
     NotificationsModule,

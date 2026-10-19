@@ -7,21 +7,25 @@ interface Props {
   task: any;
   onClose: () => void;
   onSuccess: () => void;
-  viewerRole?: string; // Передаем роль того, кто смотрит
+  viewerRole?: string;
 }
 
 export default function TaskStatusModal({ projectId, stageId, task, onClose, onSuccess, viewerRole = 'manager' }: Props) {
   const [history, setHistory] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   
+  // Поля для менеджера
   const [status, setStatus] = useState(task.status);
-  const [comment, setComment] = useState('');
-  const [contractorFee, setContractorFee] = useState(task.contractorFee || '');
-  const [foremanFee, setForemanFee] = useState(task.foremanFee || '');
   const [pauseReason, setPauseReason] = useState('materials');
+  
+  // Поля для исполнителя
+  const [contractorFee, setContractorFee] = useState(task.contractorFee || '');
+  
+  const [comment, setComment] = useState('');
   const [error, setError] = useState('');
 
   const isReadOnly = viewerRole === 'client';
+  const isContractor = viewerRole === 'contractor';
 
   useEffect(() => {
     api.get(`/projects/${projectId}/stages/${stageId}/tasks/${task.id}/history`)
@@ -30,22 +34,17 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
       .finally(() => setIsLoadingHistory(false));
   }, [projectId, stageId, task.id]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // --- ЛОГИКА СОХРАНЕНИЯ ---
+
+  const handleManagerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     try {
       const payload: any = { status, comment };
-      
-      if (task.status === 'sent_to_contractor' && status === 'in_progress') {
-        payload.contractorFee = contractorFee;
-        payload.foremanFee = foremanFee;
-      }
-      
       if (status === 'paused') {
         payload.pauseReason = pauseReason;
         payload.pauseComment = comment;
       }
-
       await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${task.id}/status`, payload);
       onSuccess();
       onClose();
@@ -53,29 +52,121 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
       setError(err.response?.data?.message || 'Ошибка смены статуса');
     }
   };
+    const handleContractorSubmitWork = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${task.id}/status`, {
+        status: 'on_review',
+        comment: comment || 'Работа сдана исполнителем',
+      });
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Ошибка сдачи работы');
+    }
+  };
+
+  const handleContractorAccept = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${task.id}/accept`, {
+        contractorFee,
+        comment
+      });
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Ошибка принятия задачи');
+    }
+  };
+
+  // ================= ОТРИСОВКА =================
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg w-full max-w-2xl shadow-xl flex flex-col max-h-[90vh]">
         
         <div className="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
-          <h3 className="text-lg font-bold text-gray-800">{isReadOnly ? 'История задачи' : 'Управление задачей'}</h3>
+          <h3 className="text-lg font-bold text-gray-800">
+            {isContractor ? 'Принятие задачи' : isReadOnly ? 'История задачи' : 'Управление задачей'}
+          </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl">×</button>
         </div>
 
         <div className="p-5 overflow-y-auto flex-1">
           {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">{error}</div>}
 
-          {/* Форма смены статуса (только если не readonly) */}
-          {!isReadOnly && (
-            <form onSubmit={handleSubmit} className="mb-8 border-b pb-6">
+          {/* ФОРМА ДЛЯ ИСПОЛНИТЕЛЯ (ТОЛЬКО ЦЕНА И КОММЕНТАРИЙ) */}
+          {isContractor && task.status === 'sent_to_contractor' && (
+            <form onSubmit={handleContractorAccept} className="mb-8 border-b pb-6 bg-blue-50 p-4 rounded-lg border-blue-200">
+              <h4 className="font-semibold text-blue-900 mb-3 text-lg">Условия работы</h4>
+              <p className="text-sm text-blue-800 mb-4">Вы собираетесь взять задачу <strong>«{task.name}»</strong>. Укажите вашу стоимость.</p>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-blue-900 mb-1">Ваш гонорар (₽)</label>
+                <input 
+                  type="number" step="0.01" required 
+                  value={contractorFee} onChange={(e) => setContractorFee(e.target.value)} 
+                  className="w-full border border-blue-300 p-2 rounded focus:ring-2 focus:ring-blue-500" 
+                  placeholder="Например: 15000"
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-blue-900 mb-1">Комментарий (опционально)</label>
+                <textarea 
+                  value={comment} onChange={(e) => setComment(e.target.value)} 
+                  className="w-full border border-blue-300 p-2 rounded focus:ring-2 focus:ring-blue-500" 
+                  rows={2} placeholder="Сроки, условия и т.д." 
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button type="submit" className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-medium shadow-sm">
+                  Отправить менеджеру
+                </button>
+                <button type="button" onClick={onClose} className="bg-gray-200 text-gray-700 px-6 py-2 rounded hover:bg-gray-300 font-medium">
+                  Отмена
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ФОРМА ДЛЯ ИСПОЛНИТЕЛЯ: СДАТЬ РАБОТУ */}
+          {isContractor && task.status === 'in_progress' && (
+            <form onSubmit={handleContractorSubmitWork} className="mb-8 border-b pb-6 bg-yellow-50 p-4 rounded-lg border-yellow-200">
+              <h4 className="font-semibold text-yellow-900 mb-3 text-lg">Сдача работы</h4>
+              <p className="text-sm text-yellow-800 mb-4">
+                Вы сдаете задачу <strong>«{task.name}»</strong>. Она уйдет на проверку Технадзору.
+              </p>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-yellow-900 mb-1">Комментарий (опционально)</label>
+                <textarea 
+                  value={comment} onChange={(e) => setComment(e.target.value)} 
+                  className="w-full border border-yellow-300 p-2 rounded focus:ring-2 focus:ring-yellow-500" 
+                  rows={2} placeholder="Опишите, что было сделано..." 
+                />
+              </div>
+
+              <button type="submit" className="bg-yellow-600 text-white px-6 py-2 rounded hover:bg-yellow-700 font-medium shadow-sm">
+                Сдать работу Технадзору
+              </button>
+            </form>
+          )}
+
+          {/* ФОРМА ДЛЯ МЕНЕДЖЕРА */}
+          {!isContractor && !isReadOnly && (
+            <form onSubmit={handleManagerSubmit} className="mb-8 border-b pb-6">
               <h4 className="font-semibold text-gray-700 mb-3">Изменить статус</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Новый статус</label>
                   <select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full border p-2 rounded">
                     <option value="pending_approval">На утверждении</option>
-                    <option value="sent_to_contractor">Отправлено исполнителю</option>
+                    <option value="sent_to_contractor">Отправить исполнителю</option>
                     <option value="in_progress">В работе</option>
                     <option value="on_review">На проверке (Технадзор)</option>
                     <option value="accepted">Принято</option>
@@ -94,32 +185,17 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
                   </div>
                 )}
               </div>
-
-              {task.status === 'sent_to_contractor' && status === 'in_progress' && (
-                <div className="bg-blue-50 p-4 rounded-lg mb-4 border border-blue-200 grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-blue-800 mb-1">Ваш гонорар (Исполнитель)</label>
-                    <input type="number" step="0.01" value={contractorFee} required onChange={(e) => setContractorFee(e.target.value)} className="w-full border p-2 rounded" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-blue-800 mb-1">Гонорар прораба</label>
-                    <input type="number" step="0.01" value={foremanFee} onChange={(e) => setForemanFee(e.target.value)} className="w-full border p-2 rounded" />
-                  </div>
-                </div>
-              )}
-
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">Комментарий</label>
                 <textarea value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border p-2 rounded" rows={2} placeholder="Комментарий к смене статуса..." />
               </div>
-
               <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 font-medium">
                 Сохранить изменения
               </button>
             </form>
           )}
 
-          {/* История */}
+          {/* ИСТОРИЯ */}
           <div>
             <h4 className="font-semibold text-gray-700 mb-3">История изменений</h4>
             {isLoadingHistory ? (
@@ -144,7 +220,6 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
             )}
           </div>
         </div>
-
       </div>
     </div>
   );
