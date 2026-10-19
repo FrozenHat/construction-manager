@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsNumberString } from 'class-validator';
 import { TaskStatus, PauseReason } from '../entities/task-status.enum';
 
 export class ChangeTaskStatusDto {
@@ -16,4 +16,13 @@ export class ChangeTaskStatusDto {
   @IsOptional()
   @IsString()
   pauseComment?: string;
+
+  // Новые поля: специалист/прораб может зафиксировать стоимость при принятии задачи
+  @IsOptional()
+  @IsNumberString()
+  contractorFee?: string;
+
+  @IsOptional()
+  @IsNumberString()
+  foremanFee?: string;
 }

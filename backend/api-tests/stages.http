@@ -9,7 +9,7 @@ Content-Type: application/json
 }
 
 ### 1. Создать этап (замените PROJECT_ID)
-POST http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages
+POST http://localhost:3000/api/projects/1d050f9c-19bb-4ca0-9464-a6e080550e1f/stages
 Authorization: Bearer {{login.response.body.accessToken}}
 Content-Type: application/json
 
@@ -20,15 +20,15 @@ Content-Type: application/json
 }
 
 ### 2. Список этапов
-GET http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages
+GET http://localhost:3000/api/projects/1d050f9c-19bb-4ca0-9464-a6e080550e1f/stages
 Authorization: Bearer {{login.response.body.accessToken}}
 
 ### 3. Получить один (замените STAGE_ID)
-GET http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages/ВСТАВЬТЕ_STAGE_ID
+GET http://localhost:3000/api/projects/1d050f9c-19bb-4ca0-9464-a6e080550e1f/stages/2c0e7c1f-018c-4c5e-a5f2-a6a13b1fcc64
 Authorization: Bearer {{login.response.body.accessToken}}
 
 ### 4. Изменить статус: draft → pending_approval
-POST http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages/ВСТАВЬТЕ_STAGE_ID/status
+POST http://localhost:3000/api/projects/1d050f9c-19bb-4ca0-9464-a6e080550e1f/stages/2c0e7c1f-018c-4c5e-a5f2-a6a13b1fcc64/status
 Authorization: Bearer {{login.response.body.accessToken}}
 Content-Type: application/json
 
@@ -38,7 +38,7 @@ Content-Type: application/json
 }
 
 ### 5. Пропустить статус: draft → completed (должно быть 400)
-POST http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages/ВСТАВЬТЕ_STAGE_ID/status
+POST http://localhost:3000/api/projects/1d050f9c-19bb-4ca0-9464-a6e080550e1f/stages/2c0e7c1f-018c-4c5e-a5f2-a6a13b1fcc64/status
 Authorization: Bearer {{login.response.body.accessToken}}
 Content-Type: application/json
 
@@ -47,5 +47,5 @@ Content-Type: application/json
 }
 
 ### 6. История статусов
-GET http://localhost:3000/api/projects/ВСТАВЬТЕ_PROJECT_ID/stages/ВСТАВЬТЕ_STAGE_ID/history
+GET http://localhost:3000/api/projects/1d050f9c-19bb-4ca0-9464-a6e080550e1f/stages/2c0e7c1f-018c-4c5e-a5f2-a6a13b1fcc64/history
 Authorization: Bearer {{login.response.body.accessToken}}

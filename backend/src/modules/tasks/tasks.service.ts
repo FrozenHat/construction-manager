@@ -13,6 +13,8 @@ import { User } from '../users/entities/user.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { ChangeTaskStatusDto } from './dto/change-task-status.dto';
+import { TransactionsService } from '../transactions/transactions.service';
+import { TransactionCategory } from '../transactions/entities/transaction.enums';
 
 /**
  * Конечный автомат статусов задач.
@@ -67,6 +69,7 @@ export class TasksService {
     @InjectRepository(TaskStatusHistory)
     private readonly historyRepo: Repository<TaskStatusHistory>,
     private readonly stagesService: StagesService,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   async create(
@@ -180,6 +183,12 @@ export class TasksService {
     const fromStatus = task.status;
     task.status = dto.status;
 
+    // ФИКСАЦИЯ СТОИМОСТИ ИСПОЛНИТЕЛЕМ
+    if (fromStatus === TaskStatus.SENT_TO_CONTRACTOR && dto.status === TaskStatus.IN_PROGRESS) {
+    if (dto.contractorFee) task.contractorFee = dto.contractorFee;
+    if (dto.foremanFee) task.foremanFee = dto.foremanFee;
+    }
+
     // Автоустановка временных меток
     if (dto.status === TaskStatus.IN_PROGRESS && !task.startedAt) {
       task.startedAt = new Date();
@@ -213,8 +222,36 @@ export class TasksService {
         comment: dto.comment ?? null,
       }),
     );
+    
 
-    return saved;
+    // НАЧИСЛЕНИЕ ГОНОРАРОВ ПРИ УСПЕШНОМ ЗАВЕРШЕНИИ (Код перенесен ДО return)
+    if (dto.status === TaskStatus.COMPLETED) {
+      // 1. Транзакция на гонорар исполнителю
+      if (saved.contractorFee && saved.contractorId) {
+        await this.transactionsService.createSystemTransaction({
+          projectId: saved.projectId,
+          stageId: saved.stageId,
+          taskId: saved.id,
+          amount: saved.contractorFee,
+          category: TransactionCategory.FEE,
+          comment: `Гонорар исполнителю по задаче: ${saved.name}`,
+        });
+      }
+
+      // 2. Транзакция на гонорар прорабу
+      if (saved.foremanFee && saved.foremanId) {
+        await this.transactionsService.createSystemTransaction({
+          projectId: saved.projectId,
+          stageId: saved.stageId,
+          taskId: saved.id,
+          amount: saved.foremanFee,
+          category: TransactionCategory.FEE,
+          comment: `Гонорар прорабу по задаче: ${saved.name}`,
+        });
+      }
+    }
+
+    return saved; // Теперь возвращаем результат в самом конце метода
   }
 
   async getHistory(
