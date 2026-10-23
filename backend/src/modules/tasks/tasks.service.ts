@@ -67,11 +67,12 @@ const ALLOWED_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
 
 @Injectable()
 export class TasksService {
-  constructor(
+   constructor(
     @InjectRepository(Task)
     private readonly tasksRepo: Repository<Task>,
     @InjectRepository(TaskStatusHistory)
     private readonly historyRepo: Repository<TaskStatusHistory>,
+    @InjectRepository(ProjectMember) // <--- Инъекция
     private readonly membersRepo: Repository<ProjectMember>,
     private readonly stagesService: StagesService,
     private readonly transactionsService: TransactionsService,

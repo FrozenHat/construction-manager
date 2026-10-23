@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import type { User } from '../types';
+// import type { User } from '../types';
 
 const AVAILABLE_ROLES = [
   { code: 'chief', name: 'Шеф' },
