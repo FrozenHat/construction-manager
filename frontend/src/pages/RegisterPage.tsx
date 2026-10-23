@@ -18,7 +18,9 @@ export default function RegisterPage() {
       localStorage.setItem('user', JSON.stringify(data.user));
       navigate('/projects');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Ошибка регистрации');
+      const msg = err.response?.data?.message;
+      // Если бэкенд вернул массив ошибок (валидация), берем первую
+      setError(Array.isArray(msg) ? msg[0] : msg || 'Ошибка регистрации');
     }
   };
 
