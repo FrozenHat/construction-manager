@@ -21,11 +21,13 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
   // Поля для исполнителя
   const [contractorFee, setContractorFee] = useState(task.contractorFee || '');
   
+  // Поля для всех
   const [comment, setComment] = useState('');
   const [error, setError] = useState('');
 
   const isReadOnly = viewerRole === 'client';
   const isContractor = viewerRole === 'contractor';
+  const isSupervisor = viewerRole === 'supervisor';
 
   useEffect(() => {
     api.get(`/projects/${projectId}/stages/${stageId}/tasks/${task.id}/history`)
@@ -52,20 +54,6 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
       setError(err.response?.data?.message || 'Ошибка смены статуса');
     }
   };
-    const handleContractorSubmitWork = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    try {
-      await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${task.id}/status`, {
-        status: 'on_review',
-        comment: comment || 'Работа сдана исполнителем',
-      });
-      onSuccess();
-      onClose();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Ошибка сдачи работы');
-    }
-  };
 
   const handleContractorAccept = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,10 +70,27 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
     }
   };
 
-    const handleReview = async (status: 'accepted' | 'paused') => {
+  const handleContractorSubmitWork = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${task.id}/status`, {
+        status: 'on_review',
+        comment: comment || 'Работа сдана исполнителем',
+      });
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Ошибка сдачи работы');
+    }
+  };
+
+  const handleSupervisorReview = async (newStatus: 'accepted' | 'paused') => {
+    setError('');
     try {
       await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${task.id}/review`, {
-        status, comment
+        status: newStatus,
+        comment
       });
       onSuccess();
       onClose();
@@ -93,6 +98,7 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
       setError(err.response?.data?.message || 'Ошибка проверки');
     }
   };
+
   // ================= ОТРИСОВКА =================
 
   return (
@@ -101,7 +107,7 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
         
         <div className="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
           <h3 className="text-lg font-bold text-gray-800">
-            {isContractor ? 'Принятие задачи' : isReadOnly ? 'История задачи' : 'Управление задачей'}
+            {isContractor ? 'Принятие задачи' : isSupervisor ? 'Проверка задачи' : isReadOnly ? 'История задачи' : 'Управление задачей'}
           </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl">×</button>
         </div>
@@ -109,14 +115,14 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
         <div className="p-5 overflow-y-auto flex-1">
           {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">{error}</div>}
 
-          {/* ФОРМА ДЛЯ ИСПОЛНИТЕЛЯ (ТОЛЬКО ЦЕНА И КОММЕНТАРИЙ) */}
+          {/* ФОРМА ДЛЯ ИСПОЛНИТЕЛЯ (ПРИНЯТИЕ) */}
           {isContractor && task.status === 'sent_to_contractor' && (
             <form onSubmit={handleContractorAccept} className="mb-8 border-b pb-6 bg-blue-50 p-4 rounded-lg border-blue-200">
               <h4 className="font-semibold text-blue-900 mb-3 text-lg">Условия работы</h4>
               <p className="text-sm text-blue-800 mb-4">Вы собираетесь взять задачу <strong>«{task.name}»</strong>. Укажите вашу стоимость.</p>
               
               <div className="mb-4">
-                <label className="block text-sm font-medium text-blue-900 mb-1">Ваш гонорар (₽)</label>
+                <label className="block text-sm font-medium text-blue-900 mb-1">Ваш гонорар (MDL)</label>
                 <input 
                   type="number" step="0.01" required 
                   value={contractorFee} onChange={(e) => setContractorFee(e.target.value)} 
@@ -145,7 +151,7 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
             </form>
           )}
 
-          {/* ФОРМА ДЛЯ ИСПОЛНИТЕЛЯ: СДАТЬ РАБОТУ */}
+          {/* ФОРМА ДЛЯ ИСПОЛНИТЕЛЯ (СДАТЬ РАБОТУ) */}
           {isContractor && task.status === 'in_progress' && (
             <form onSubmit={handleContractorSubmitWork} className="mb-8 border-b pb-6 bg-yellow-50 p-4 rounded-lg border-yellow-200">
               <h4 className="font-semibold text-yellow-900 mb-3 text-lg">Сдача работы</h4>
@@ -168,14 +174,14 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
             </form>
           )}
 
-                    {/* ФОРМА ДЛЯ ТЕХНАДЗОРА */}
-          {viewerRole === 'supervisor' && task.status === 'on_review' && (
-            <form onSubmit={handleSupervisorReview} className="mb-8 border-b pb-6 bg-orange-50 p-4 rounded-lg border-orange-200">
+          {/* ФОРМА ДЛЯ ТЕХНАДЗОРА */}
+          {isSupervisor && task.status === 'on_review' && (
+            <div className="mb-8 border-b pb-6 bg-orange-50 p-4 rounded-lg border-orange-200">
               <h4 className="font-semibold text-orange-900 mb-3 text-lg">Отчет о проверке</h4>
               
               <div className="mb-4">
                 <label className="block text-sm font-medium text-orange-900 mb-1">Комментарий к отчету</label>
-                <textarea value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-orange-300 p-2 rounded" rows={3} />
+                <textarea value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-orange-300 p-2 rounded" rows={3} placeholder="Опишите выявленные недостатки или подтвердите качество..." />
               </div>
               {/* Заглушка для фото (в будущем прикрепим MinIO) */}
               <div className="mb-4 border-2 border-dashed border-orange-300 p-4 text-center rounded text-orange-700">
@@ -183,14 +189,14 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
               </div>
 
               <div className="flex gap-2">
-                <button type="button" onClick={() => handleReview('accepted')} className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700">Принять и завершить</button>
-                <button type="button" onClick={() => handleReview('paused')} className="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700">Приостановить (Брак)</button>
+                <button type="button" onClick={() => handleSupervisorReview('accepted')} className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-medium">Принять и завершить</button>
+                <button type="button" onClick={() => handleSupervisorReview('paused')} className="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700 font-medium">Приостановить (Брак)</button>
               </div>
-            </form>
+            </div>
           )}
 
-          {/* ФОРМА ДЛЯ МЕНЕДЖЕРА */}
-          {!isContractor && !isReadOnly && (
+          {/* ФОРМА ДЛЯ МЕНЕДЖЕРА (ОБЩАЯ) */}
+          {!isContractor && !isSupervisor && !isReadOnly && (
             <form onSubmit={handleManagerSubmit} className="mb-8 border-b pb-6">
               <h4 className="font-semibold text-gray-700 mb-3">Изменить статус</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">

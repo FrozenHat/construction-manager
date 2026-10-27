@@ -4,7 +4,6 @@ import { api } from '../api/client';
 import type { Stage, Task, User, AppDocument, Transaction } from '../types';
 import TaskStatusModal from '../components/TaskStatusModal';
 import UserProfileModal from '../components/UserProfileModal';
-import NotificationBell from '../components/NotificationBell';
 
 type Tab = 'tasks' | 'finance' | 'documents';
 
@@ -14,22 +13,20 @@ export default function ProjectDetailsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('tasks');
   
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-  const [myRole, setMyRole] = useState<string>('client'); // Роль в этом проекте
+  const [myRole, setMyRole] = useState<string>('client');
 
   // --- СОСТОЯНИЯ ---
   const [stages, setStages] = useState<Stage[]>([]);
   const [tasks, setTasks] = useState<Record<string, Task[]>>({});
-  const [myTasks, setMyTasks] = useState<Task[]>([]); // Задачи для Исполнителя
+  const [myTasks, setMyTasks] = useState<Task[]>([]);
   
   const [members, setMembers] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [newMember, setNewMember] = useState({ userId: '', roleCode: 'contractor' });
   
-  // Стейт для создания задач
   const [newStageName, setNewStageName] = useState('');
   const [newTask, setNewTask] = useState<Record<string, { name: string, foremanId: string, contractorId: string, clientPrice: string }>>({});
   
-  // Модалки
   const [selectedTask, setSelectedTask] = useState<{ stageId: string, task: Task } | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<User | null>(null);
 
@@ -38,8 +35,9 @@ export default function ProjectDetailsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [incomeAmount, setIncomeAmount] = useState('');
   const [isAddingIncome, setIsAddingIncome] = useState(false);
-
-  
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseType, setExpenseType] = useState('work');
+  const [isAddingExpense, setIsAddingExpense] = useState(false);
 
   // Документы
   const [documents, setDocuments] = useState<AppDocument[]>([]);
@@ -49,10 +47,6 @@ export default function ProjectDetailsPage() {
   useEffect(() => {
     determineRole();
   }, [projectId]);
-
-   
-
-  // ================= ОПРЕДЕЛЕНИЕ РОЛИ И ЗАГРУЗКА =================
 
   const determineRole = async () => {
     const globalRoles = currentUser.roles?.map((r: any) => r.code) || [];
@@ -65,13 +59,12 @@ export default function ProjectDetailsPage() {
     try {
       const { data: membersData } = await api.get(`/projects/${projectId}/members`);
       setMembers(membersData);
-      
       const myMembership = membersData.find((m: any) => m.userId === currentUser.id);
       
       if (myMembership) {
         setMyRole(myMembership.roleCode);
         if (myMembership.roleCode === 'contractor') {
-          loadMyTasks(); // Если мы исполнитель — грузим только наши задачи
+          loadMyTasks();
         } else {
           loadAllData();
         }
@@ -79,7 +72,7 @@ export default function ProjectDetailsPage() {
         setMyRole('none');
       }
     } catch (error) {
-      console.error(error);
+      console.error('Ошибка определения роли:', error);
     }
   };
 
@@ -114,7 +107,7 @@ export default function ProjectDetailsPage() {
         const { data: tasksData } = await api.get(`/projects/${projectId}/stages/${stage.id}/tasks`);
         const assigned = tasksData
           .filter((t: any) => t.contractorId === currentUser.id)
-          .map((t: any) => ({ ...t, stageId: stage.id })); // Привязываем stageId
+          .map((t: any) => ({ ...t, stageId: stage.id }));
         allMyTasks = [...allMyTasks, ...assigned];
       }
       setMyTasks(allMyTasks);
@@ -155,8 +148,6 @@ export default function ProjectDetailsPage() {
       setTransactions(data);
     } catch (error) { console.error(error); }
   };
-
-  // ================= ДЕЙСТВИЯ =================
 
   const handleCreateStage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,23 +195,37 @@ export default function ProjectDetailsPage() {
     finally { setIsAddingIncome(false); }
   };
 
+  const handleAddExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAddingExpense(true);
+    try {
+      await api.post(`/projects/${projectId}/transactions`, {
+        type: 'expense', 
+        category: expenseType, 
+        amount: expenseAmount, 
+        comment: 'Выплата по задаче'
+      });
+      setExpenseAmount('');
+      fetchTransactions();
+    } catch (error) { alert('Ошибка создания расхода'); } 
+    finally { setIsAddingExpense(false); }
+  };
+
   const handleApproveTransaction = async (txId: string) => {
     try {
       await api.patch(`/projects/${projectId}/transactions/${txId}/approve`);
       fetchBalance();
       fetchTransactions();
-    } catch (error) { alert('Ошибка утверждения (нужны права бухгалтера)'); }
+    } catch (error) { alert('Ошибка утверждения'); }
   };
 
   const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const formData = new FormData();
     formData.append('file', file);
     formData.append('ownerType', 'project');
     formData.append('ownerId', projectId!);
-
     setIsUploading(true);
     try {
       await api.post(`/projects/${projectId}/documents/upload`, formData, {
@@ -242,15 +247,22 @@ export default function ProjectDetailsPage() {
   };
 
   const handleDeclineTask = async (stageId: string, taskId: string) => {
-    if (!confirm('Вы уверены, что хотите отказаться от задачи?')) return;
+    if (!confirm('Вы уверены, что хотите отказаться?')) return;
     try {
-      await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${taskId}/status`, {
-        status: 'pending_approval',
-        comment: 'Исполнитель отказался от задачи'
-      });
+      await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${taskId}/decline`);
       loadMyTasks();
     } catch (error) {
-      alert('Ошибка отказа от задачи');
+      alert('Ошибка отказа');
+    }
+  };
+
+  const handleRequestPayment = async (stageId: string, taskId: string) => {
+    if (!confirm('Запросить выплату у бухгалтера?')) return;
+    try {
+      await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${taskId}/request-payment`);
+      loadMyTasks();
+    } catch (error) {
+      alert('Ошибка запроса выплаты');
     }
   };
 
@@ -266,29 +278,15 @@ export default function ProjectDetailsPage() {
 
   const formatMoney = (val: string | null) => new Intl.NumberFormat('ru-RU').format(Number(val || 0));
   
-  // Права
   const canSeeFinance = ['chief', 'admin', 'manager', 'accountant'].includes(myRole);
   const canManageTasks = ['chief', 'admin', 'manager'].includes(myRole);
 
-  const handleDeclineTask = async (stageId: string, taskId: string) => {
-    if (!confirm('Вы уверены, что хотите отказаться?')) return;
-    await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${taskId}/decline`);
-    loadMyTasks();
-  };
-  const handleRequestPayment = async (stageId: string, taskId: string) => {
-    if (!confirm('Запросить выплату у бухгалтера?')) return;
-    await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${taskId}/request-payment`);
-    loadMyTasks();
-  };
-
-  // ================= ЭКРАН ИСПОЛНИТЕЛЯ (CONTRACTOR) =================
   if (myRole === 'contractor') {
     return (
       <div className="min-h-screen bg-gray-50 pb-12">
         <header className="bg-white shadow sticky top-0 z-10">
           <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
             <h1 className="text-xl font-bold text-gray-800">Мои задачи</h1>
-            <NotificationBell />
             <button onClick={() => { localStorage.clear(); navigate('/login'); }} className="text-red-500 text-sm hover:underline">Выйти</button>
           </div>
         </header>
@@ -302,26 +300,45 @@ export default function ProjectDetailsPage() {
                 </p>
                 {task.contractorFee && (
                   <p className="text-sm text-green-600 font-medium mt-2 bg-green-50 inline-block px-2 py-1 rounded">
-                    Ваш гонорар: {formatMoney(task.contractorFee)} ₽
+                    Ваш гонорар: {formatMoney(task.contractorFee)} MDL
                   </p>
                 )}
               </div>
-                            <div className="flex gap-2">
+              
+              <div className="flex gap-2">
                 {task.status === 'sent_to_contractor' && (
                   <>
-                    <button onClick={() => setSelectedTask({ stageId: (task as any).stageId, task })} className="bg-green-600 text-white px-5 py-2 rounded-lg">Принять</button>
-                    <button onClick={() => handleDeclineTask((task as any).stageId, task.id)} className="bg-red-100 text-red-700 px-5 py-2 rounded-lg">Отказ</button>
+                    <button 
+                      onClick={() => setSelectedTask({ stageId: (task as any).stageId, task })}
+                      className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 font-medium shadow-sm"
+                    >
+                      Согласиться
+                    </button>
+                    <button 
+                      onClick={() => handleDeclineTask((task as any).stageId, task.id)}
+                      className="bg-red-100 text-red-700 px-5 py-2 rounded-lg hover:bg-red-200 font-medium"
+                    >
+                      Отказаться
+                    </button>
                   </>
                 )}
                 {task.status === 'in_progress' && (
-                  <button onClick={() => setSelectedTask({ stageId: (task as any).stageId, task })} className="bg-blue-600 text-white px-5 py-2 rounded-lg">Сдать работу</button>
+                  <button 
+                    onClick={() => setSelectedTask({ stageId: (task as any).stageId, task })}
+                    className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm"
+                  >
+                    Сдать работу
+                  </button>
                 )}
                 {task.status === 'accepted' && (
-                  <button onClick={() => handleRequestPayment((task as any).stageId, task.id)} className="bg-purple-600 text-white px-5 py-2 rounded-lg">Запросить выплату</button>
+                  <button 
+                    onClick={() => handleRequestPayment((task as any).stageId, task.id)}
+                    className="bg-purple-600 text-white px-5 py-2 rounded-lg hover:bg-purple-700 font-medium shadow-sm"
+                  >
+                    Запросить выплату
+                  </button>
                 )}
               </div>
-              
-              
             </div>
           ))}
           {myTasks.length === 0 && <p className="text-center text-gray-500 py-8">У вас пока нет назначенных задач.</p>}
@@ -332,7 +349,7 @@ export default function ProjectDetailsPage() {
             projectId={projectId!} 
             stageId={selectedTask.stageId} 
             task={selectedTask.task} 
-            viewerRole={myRole} // Передаем роль
+            viewerRole={myRole}
             onClose={() => setSelectedTask(null)} 
             onSuccess={() => { setSelectedTask(null); loadMyTasks(); }} 
           />
@@ -341,7 +358,6 @@ export default function ProjectDetailsPage() {
     );
   }
 
-  // ================= ОБЩИЙ ЭКРАН =================
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
       <header className="bg-white shadow sticky top-0 z-10">
@@ -350,13 +366,11 @@ export default function ProjectDetailsPage() {
           <h1 className="text-xl font-bold text-gray-800">Управление проектом</h1>
           
           <div className="ml-auto flex bg-gray-100 p-1 rounded-lg">
-            <button onClick={() => setActiveTab('tasks')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'tasks' ? 'bg-white shadow text-black' : 'text-gray-500 hover:text-gray-700'}`}>Задачи</button>
-            
+            <button onClick={() => setActiveTab('tasks')} className={`px-4 py-2 rounded-md text-sm font-medium ${activeTab === 'tasks' ? 'bg-white shadow text-black' : 'text-gray-500'}`}>Задачи</button>
             {canSeeFinance && (
-              <button onClick={() => setActiveTab('finance')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'finance' ? 'bg-white shadow text-black' : 'text-gray-500 hover:text-gray-700'}`}>Финансы</button>
+              <button onClick={() => setActiveTab('finance')} className={`px-4 py-2 rounded-md text-sm font-medium ${activeTab === 'finance' ? 'bg-white shadow text-black' : 'text-gray-500'}`}>Финансы</button>
             )}
-            
-            <button onClick={() => setActiveTab('documents')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'documents' ? 'bg-white shadow text-black' : 'text-gray-500 hover:text-gray-700'}`}>Документы</button>
+            <button onClick={() => setActiveTab('documents')} className={`px-4 py-2 rounded-md text-sm font-medium ${activeTab === 'documents' ? 'bg-white shadow text-black' : 'text-gray-500'}`}>Документы</button>
           </div>
         </div>
       </header>
@@ -365,13 +379,12 @@ export default function ProjectDetailsPage() {
         
         <div className="lg:col-span-3">
           
-          {/* ВКЛАДКА: ЗАДАЧИ */}
           {activeTab === 'tasks' && (
             <div className="space-y-6">
               {canManageTasks && (
                 <form onSubmit={handleCreateStage} className="bg-white p-4 rounded-lg shadow-sm flex gap-4 border">
                   <input type="text" placeholder="Название нового этапа" value={newStageName} onChange={(e) => setNewStageName(e.target.value)} required className="flex-1 border p-2 rounded" />
-                  <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 font-medium">Добавить этап</button>
+                  <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">Добавить этап</button>
                 </form>
               )}
 
@@ -386,21 +399,18 @@ export default function ProjectDetailsPage() {
                         <div key={task.id} className="flex flex-col md:flex-row justify-between md:items-center p-4 border rounded-lg hover:bg-gray-50 bg-white gap-4">
                           <div className="flex-1">
                             <p className="font-bold text-gray-800 text-lg">{task.name}</p>
-                            
                             <div className="flex gap-3 items-center mt-2 flex-wrap">
                               <span className={`text-xs px-2 py-1 rounded font-medium ${getStatusColor(task.status)}`}>
                                 {task.status.replace('_', ' ')}
                               </span>
-                              
                               {task.clientPrice && (myRole !== 'supervisor') && (
                                 <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">
-                                  Клиенту: {formatMoney(task.clientPrice)} ₽
+                                  Клиенту: {formatMoney(task.clientPrice)} MDL
                                 </span>
                               )}
-                              
                               {task.contractorFee && (
                                 <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-1 rounded border border-green-200">
-                                  Исполнителю: {formatMoney(task.contractorFee)} ₽
+                                  Исполнителю: {formatMoney(task.contractorFee)} MDL
                                 </span>
                               )}
                             </div>
@@ -409,24 +419,17 @@ export default function ProjectDetailsPage() {
                               <div>
                                 <span className="text-gray-400 text-xs">Прораб:</span>{' '}
                                 {task.foreman ? (
-                                  <button 
-                                    onClick={() => setSelectedProfile(task.foreman!)}
-                                    className="text-blue-600 font-medium hover:underline hover:text-blue-800 transition-colors"
-                                  >
+                                  <button onClick={() => setSelectedProfile(task.foreman!)} className="text-blue-600 font-medium hover:underline">
                                     {task.foreman.fullName}
                                   </button>
                                 ) : (
                                   <span className="text-gray-400 italic">Не назначен</span>
                                 )}
                               </div>
-                              
                               <div>
                                 <span className="text-gray-400 text-xs">Исполнитель:</span>{' '}
                                 {task.contractor ? (
-                                  <button 
-                                    onClick={() => setSelectedProfile(task.contractor!)}
-                                    className="text-blue-600 font-medium hover:underline hover:text-blue-800 transition-colors"
-                                  >
+                                  <button onClick={() => setSelectedProfile(task.contractor!)} className="text-blue-600 font-medium hover:underline">
                                     {task.contractor.fullName}
                                   </button>
                                 ) : (
@@ -438,19 +441,9 @@ export default function ProjectDetailsPage() {
 
                           <div className="ml-0 md:ml-4 flex flex-col gap-2">
                             {myRole === 'client' ? (
-                              <button 
-                                onClick={() => setSelectedTask({ stageId: stage.id, task })} 
-                                className="text-sm bg-gray-100 border px-4 py-2 rounded-lg hover:bg-gray-200 font-medium"
-                              >
-                                История
-                              </button>
+                              <button onClick={() => setSelectedTask({ stageId: stage.id, task })} className="text-sm bg-gray-100 border px-4 py-2 rounded-lg hover:bg-gray-200 font-medium">История</button>
                             ) : (
-                              <button 
-                                onClick={() => setSelectedTask({ stageId: stage.id, task })} 
-                                className="text-sm bg-gray-100 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-200 font-medium shadow-sm transition-all"
-                              >
-                                Изменить статус
-                              </button>
+                              <button onClick={() => setSelectedTask({ stageId: stage.id, task })} className="text-sm bg-gray-100 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-200 font-medium shadow-sm">Изменить статус</button>
                             )}
                           </div>
                         </div>
@@ -471,7 +464,7 @@ export default function ProjectDetailsPage() {
                           </select>
                         </div>
                         <div className="flex flex-col md:flex-row gap-2 items-center">
-                          <input type="number" step="0.01" placeholder="Цена для клиента (₽)" value={newTask[stage.id]?.clientPrice || ''} onChange={(e) => setNewTask(prev => ({ ...prev, [stage.id]: { ...prev[stage.id], clientPrice: e.target.value } }))} className="flex-1 border p-2 rounded text-sm" />
+                          <input type="number" step="0.01" placeholder="Цена для клиента (MDL)" value={newTask[stage.id]?.clientPrice || ''} onChange={(e) => setNewTask(prev => ({ ...prev, [stage.id]: { ...prev[stage.id], clientPrice: e.target.value } }))} className="flex-1 border p-2 rounded text-sm" />
                           <button type="submit" className="bg-green-600 text-white px-6 py-2 rounded text-sm hover:bg-green-700 font-medium w-full md:w-auto">+ Добавить задачу</button>
                         </div>
                       </form>
@@ -482,38 +475,37 @@ export default function ProjectDetailsPage() {
             </div>
           )}
 
-          {/* ВКЛАДКА: ФИНАНСЫ */}
           {activeTab === 'finance' && canSeeFinance && (
             <div className="space-y-6">
               <div className="bg-white p-8 rounded-lg shadow-sm border text-center">
                 <h3 className="text-gray-500 font-medium mb-2">Текущий баланс проекта</h3>
                 <p className={`text-5xl font-bold ${Number(balance) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {formatMoney(balance)} <span className="text-2xl">₽</span>
+                  {formatMoney(balance)} <span className="text-2xl">MDL</span>
                 </p>
-                <p className="text-sm text-gray-400 mt-2">* Учитываются только утвержденные транзакции</p>
               </div>
 
-                            <div className="bg-white p-6 rounded-lg shadow-sm border mt-4">
+              <div className="bg-white p-6 rounded-lg shadow-sm border">
+                <h3 className="text-lg font-bold mb-4">Внести поступление</h3>
+                <form onSubmit={handleAddIncome} className="flex flex-col md:flex-row gap-4">
+                  <input type="number" step="0.01" placeholder="Сумма в MDL" required value={incomeAmount} onChange={(e) => setIncomeAmount(e.target.value)} className="flex-1 border p-2 rounded" />
+                  <button type="submit" disabled={isAddingIncome} className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 disabled:opacity-50 font-medium">
+                    {isAddingIncome ? 'Отправка...' : 'Создать транзакцию'}
+                  </button>
+                </form>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow-sm border">
                 <h3 className="text-lg font-bold mb-4">Внести расход (Оплата работ/материалов)</h3>
-                <div className="flex gap-4">
-                  <select id="expenseType" className="border p-2 rounded">
+                <form onSubmit={handleAddExpense} className="flex flex-col md:flex-row gap-4">
+                  <select value={expenseType} onChange={(e) => setExpenseType(e.target.value)} className="border p-2 rounded">
                     <option value="work">Оплата работ</option>
                     <option value="material">Оплата материалов</option>
                   </select>
-                  <input type="number" id="expenseAmount" placeholder="Сумма MDL" className="flex-1 border p-2 rounded" />
-                  <button onClick={async () => {
-                    const type = (document.getElementById('expenseType') as HTMLSelectElement).value;
-                    const amount = (document.getElementById('expenseAmount') as HTMLInputElement).value;
-                    if (!amount) return;
-                    await api.post(`/projects/${projectId}/transactions`, {
-                      type: 'expense', category: type, amount: amount, comment: 'Выплата по задаче'
-                    });
-                    alert('Расход создан. Не забудьте его утвердить в таблице ниже.');
-                    fetchTransactions();
-                  }} className="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700">
-                    Списать средства
+                  <input type="number" step="0.01" placeholder="Сумма MDL" required value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} className="flex-1 border p-2 rounded" />
+                  <button type="submit" disabled={isAddingExpense} className="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700 disabled:opacity-50 font-medium">
+                    {isAddingExpense ? 'Отправка...' : 'Списать средства'}
                   </button>
-                </div>
+                </form>
               </div>
 
               <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
@@ -540,7 +532,7 @@ export default function ProjectDetailsPage() {
                               {tx.type === 'income' ? 'Приход' : 'Расход'}
                             </span>
                           </td>
-                          <td className="p-3 font-medium whitespace-nowrap">{formatMoney(tx.amount)} ₽</td>
+                          <td className="p-3 font-medium whitespace-nowrap">{formatMoney(tx.amount)} MDL</td>
                           <td className="p-3 whitespace-nowrap">
                             <span className={`text-xs font-medium ${tx.status === 'approved' ? 'text-green-600' : tx.status === 'pending' ? 'text-yellow-600' : 'text-red-600'}`}>
                               {tx.status === 'approved' ? 'Утверждено' : tx.status === 'pending' ? 'Ожидает' : 'Отклонено'}
@@ -548,9 +540,7 @@ export default function ProjectDetailsPage() {
                           </td>
                           <td className="p-3">
                             {tx.status === 'pending' && (
-                              <button onClick={() => handleApproveTransaction(tx.id)} className="text-blue-600 hover:underline font-medium text-xs">
-                                Утвердить
-                              </button>
+                              <button onClick={() => handleApproveTransaction(tx.id)} className="text-blue-600 hover:underline font-medium text-xs">Утвердить</button>
                             )}
                           </td>
                         </tr>
@@ -565,7 +555,6 @@ export default function ProjectDetailsPage() {
             </div>
           )}
 
-          {/* ВКЛАДКА: ДОКУМЕНТЫ */}
           {activeTab === 'documents' && (
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <div className="p-6 border-b bg-gray-50 flex justify-between items-center">
@@ -601,24 +590,16 @@ export default function ProjectDetailsPage() {
               </div>
             </div>
           )}
-
         </div>
 
-        {/* ПРАВАЯ КОЛОНКА: КОМАНДА (скрываем от технадзора и клиента) */}
         {canManageTasks && (
           <div className="lg:col-span-1">
             <div className="bg-white p-6 rounded-lg shadow-sm border sticky top-24">
               <h3 className="text-lg font-bold mb-4">Команда проекта</h3>
-              
               <div className="space-y-2 mb-6">
                 {members.map(m => (
                   <div key={m.id} className="text-sm border-b pb-2">
-                    <button 
-                      onClick={() => setSelectedProfile(m.user)}
-                      className="font-medium text-blue-600 hover:underline"
-                    >
-                      {m.user.fullName}
-                    </button>
+                    <button onClick={() => setSelectedProfile(m.user)} className="font-medium text-blue-600 hover:underline">{m.user.fullName}</button>
                     <p className="text-gray-500 text-xs">{m.role.name}</p>
                   </div>
                 ))}
@@ -631,7 +612,6 @@ export default function ProjectDetailsPage() {
                   <option value="">Выберите пользователя...</option>
                   {allUsers.map(u => <option key={u.id} value={u.id}>{u.fullName}</option>)}
                 </select>
-                
                 <select required value={newMember.roleCode} onChange={(e) => setNewMember(prev => ({ ...prev, roleCode: e.target.value }))} className="border p-2 rounded text-sm">
                   <option value="manager">Менеджер</option>
                   <option value="contractor">Исполнитель</option>
@@ -640,33 +620,24 @@ export default function ProjectDetailsPage() {
                   <option value="buyer">Закупщик</option>
                   <option value="accountant">Бухгалтер</option>
                 </select>
-                <button type="submit" className="bg-gray-800 text-white p-2 rounded text-sm hover:bg-black font-medium">
-                  Добавить
-                </button>
+                <button type="submit" className="bg-gray-800 text-white p-2 rounded text-sm hover:bg-black font-medium">Добавить</button>
               </form>
             </div>
           </div>
         )}
       </main>
 
-      {/* МОДАЛКИ */}
       {selectedTask && (
         <TaskStatusModal 
-          projectId={projectId!} 
-          stageId={selectedTask.stageId} 
-          task={selectedTask.task} 
-          viewerRole={myRole} // <-- Передаем роль, чтобы клиент видел только историю
+          projectId={projectId!} stageId={selectedTask.stageId} task={selectedTask.task} 
+          viewerRole={myRole}
           onClose={() => setSelectedTask(null)} 
           onSuccess={() => { fetchStages(); fetchBalance(); }} 
         />
       )}
 
       {selectedProfile && (
-        <UserProfileModal 
-          user={selectedProfile} 
-          viewerRole={myRole} 
-          onClose={() => setSelectedProfile(null)} 
-        />
+        <UserProfileModal user={selectedProfile} viewerRole={myRole} onClose={() => setSelectedProfile(null)} />
       )}
     </div>
   );
