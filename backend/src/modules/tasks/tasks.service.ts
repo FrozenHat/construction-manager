@@ -387,7 +387,7 @@ export class TasksService {
 
     if (dto.status === 'paused') {
       task.status = TaskStatus.PAUSED;
-      task.pauseReason = 'quality'; // Технадзор приостанавливает по качеству
+      task.pauseReason = PauseReason.QUALITY; // Технадзор приостанавливает по качеству
       task.pauseComment = dto.comment || 'Требуется доработка';
       
       // Уведомляем исполнителя
