@@ -82,6 +82,17 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
     }
   };
 
+    const handleReview = async (status: 'accepted' | 'paused') => {
+    try {
+      await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${task.id}/review`, {
+        status, comment
+      });
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Ошибка проверки');
+    }
+  };
   // ================= ОТРИСОВКА =================
 
   return (
@@ -154,6 +165,27 @@ export default function TaskStatusModal({ projectId, stageId, task, onClose, onS
               <button type="submit" className="bg-yellow-600 text-white px-6 py-2 rounded hover:bg-yellow-700 font-medium shadow-sm">
                 Сдать работу Технадзору
               </button>
+            </form>
+          )}
+
+                    {/* ФОРМА ДЛЯ ТЕХНАДЗОРА */}
+          {viewerRole === 'supervisor' && task.status === 'on_review' && (
+            <form onSubmit={handleSupervisorReview} className="mb-8 border-b pb-6 bg-orange-50 p-4 rounded-lg border-orange-200">
+              <h4 className="font-semibold text-orange-900 mb-3 text-lg">Отчет о проверке</h4>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-orange-900 mb-1">Комментарий к отчету</label>
+                <textarea value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-orange-300 p-2 rounded" rows={3} />
+              </div>
+              {/* Заглушка для фото (в будущем прикрепим MinIO) */}
+              <div className="mb-4 border-2 border-dashed border-orange-300 p-4 text-center rounded text-orange-700">
+                📷 Прикрепить фотоотчет (будет реализовано позже)
+              </div>
+
+              <div className="flex gap-2">
+                <button type="button" onClick={() => handleReview('accepted')} className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700">Принять и завершить</button>
+                <button type="button" onClick={() => handleReview('paused')} className="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700">Приостановить (Брак)</button>
+              </div>
             </form>
           )}
 

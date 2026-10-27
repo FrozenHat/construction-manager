@@ -93,6 +93,8 @@ export class TasksService {
       projectId,
       stageId,
       deadline: dto.deadline ? new Date(dto.deadline) : null,
+      // Если назначен прораб или исполнитель, сразу кидаем исполнителю
+      status: (dto.contractorId || dto.foremanId) ? TaskStatus.SENT_TO_CONTRACTOR : TaskStatus.DRAFT,
     });
     const saved = await this.tasksRepo.save(task);
 
@@ -360,4 +362,80 @@ export class TasksService {
       order: { createdAt: 'DESC' },
     });
   }
+ async declineTask(projectId: string, stageId: string, taskId: string, user: User) {
+    const task = await this.findOne(projectId, stageId, taskId, user);
+    
+    // Уведомляем менеджера об отказе
+    if (task.managerId) {
+      await this.notificationsService.create(
+        task.managerId,
+        'Исполнитель отказался',
+        `Исполнитель ${user.fullName} отказался от задачи "${task.name}". Необходимо назначить другого.`,
+        `/projects/${projectId}`
+      );
+    }
+    // Статус не меняем, просто возвращаем
+    return task; 
+  }
+
+    async reviewTask(projectId: string, stageId: string, taskId: string, dto: { status: 'accepted'|'paused', comment?: string }, user: User) {
+    const task = await this.findOne(projectId, stageId, taskId, user);
+    
+    if (task.status !== TaskStatus.ON_REVIEW) {
+      throw new BadRequestException('Задача не на проверке');
+    }
+
+    if (dto.status === 'paused') {
+      task.status = TaskStatus.PAUSED;
+      task.pauseReason = 'quality'; // Технадзор приостанавливает по качеству
+      task.pauseComment = dto.comment || 'Требуется доработка';
+      
+      // Уведомляем исполнителя
+      if (task.contractorId) {
+        await this.notificationsService.create(
+          task.contractorId, 'Задача приостановлена', 
+          `Технадзор вернул задачу "${task.name}" на доработку. Комментарий: ${dto.comment}`, 
+          `/projects/${projectId}`
+        );
+      }
+    } else if (dto.status === 'accepted') {
+      task.status = TaskStatus.ACCEPTED;
+      
+      // Списываем с баланса цену ДЛЯ КЛИЕНТА (если она указана)
+      if (task.clientPrice) {
+        await this.transactionsService.createSystemTransaction({
+          projectId: task.projectId,
+          stageId: task.stageId,
+          taskId: task.id,
+          amount: task.clientPrice,
+          category: TransactionCategory.WORK,
+          comment: `Списание по задаче (для клиента): ${task.name}`
+        });
+      }
+    }
+    
+    return this.tasksRepo.save(task);
+  }
+
+ async requestPayment(projectId: string, stageId: string, taskId: string, user: User) {
+    const task = await this.findOne(projectId, stageId, taskId, user);
+    
+    // Ищем бухгалтера и шефа проекта
+    const accountants = await this.membersRepo.find({ where: { projectId, roleCode: 'accountant' } });
+    const chiefs = await this.membersRepo.find({ where: { projectId, roleCode: 'chief' } });
+    
+    const recipients = [...accountants, ...chiefs];
+    for (const r of recipients) {
+      await this.notificationsService.create(
+        r.userId, 'Запрос на выплату',
+        `Исполнитель ${user.fullName} запросил выплату ${task.contractorFee} MDL за задачу "${task.name}".`,
+        `/projects/${projectId}`
+      );
+    }
+    task.status = TaskStatus.COMPLETED;
+    return this.tasksRepo.save(task);
+  }
+
+
+
 }

@@ -32,6 +32,7 @@ export class TasksController {
   }
    @RequirePermission('task.update')
   @Post(':id/accept')
+  @Post(':id/decline')
   acceptTask(
     @Param('projectId') projectId: string,
     @Param('stageId') stageId: string,

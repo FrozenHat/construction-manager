@@ -39,6 +39,8 @@ export default function ProjectDetailsPage() {
   const [incomeAmount, setIncomeAmount] = useState('');
   const [isAddingIncome, setIsAddingIncome] = useState(false);
 
+  
+
   // Документы
   const [documents, setDocuments] = useState<AppDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -47,6 +49,8 @@ export default function ProjectDetailsPage() {
   useEffect(() => {
     determineRole();
   }, [projectId]);
+
+   
 
   // ================= ОПРЕДЕЛЕНИЕ РОЛИ И ЗАГРУЗКА =================
 
@@ -266,6 +270,17 @@ export default function ProjectDetailsPage() {
   const canSeeFinance = ['chief', 'admin', 'manager', 'accountant'].includes(myRole);
   const canManageTasks = ['chief', 'admin', 'manager'].includes(myRole);
 
+  const handleDeclineTask = async (stageId: string, taskId: string) => {
+    if (!confirm('Вы уверены, что хотите отказаться?')) return;
+    await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${taskId}/decline`);
+    loadMyTasks();
+  };
+  const handleRequestPayment = async (stageId: string, taskId: string) => {
+    if (!confirm('Запросить выплату у бухгалтера?')) return;
+    await api.post(`/projects/${projectId}/stages/${stageId}/tasks/${taskId}/request-payment`);
+    loadMyTasks();
+  };
+
   // ================= ЭКРАН ИСПОЛНИТЕЛЯ (CONTRACTOR) =================
   if (myRole === 'contractor') {
     return (
@@ -291,41 +306,22 @@ export default function ProjectDetailsPage() {
                   </p>
                 )}
               </div>
-              
-              <div className="flex gap-2">
+                            <div className="flex gap-2">
                 {task.status === 'sent_to_contractor' && (
                   <>
-                    <button 
-                      onClick={() => setSelectedTask({ stageId: (task as any).stageId, task })}
-                      className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 font-medium shadow-sm transition-colors"
-                    >
-                      Согласиться
-                    </button>
-                    <button 
-                      onClick={() => handleDeclineTask((task as any).stageId, task.id)}
-                      className="bg-red-100 text-red-700 px-5 py-2 rounded-lg hover:bg-red-200 font-medium transition-colors"
-                    >
-                      Отказаться
-                    </button>
+                    <button onClick={() => setSelectedTask({ stageId: (task as any).stageId, task })} className="bg-green-600 text-white px-5 py-2 rounded-lg">Принять</button>
+                    <button onClick={() => handleDeclineTask((task as any).stageId, task.id)} className="bg-red-100 text-red-700 px-5 py-2 rounded-lg">Отказ</button>
                   </>
                 )}
                 {task.status === 'in_progress' && (
-                  <button 
-                    onClick={() => setSelectedTask({ stageId: (task as any).stageId, task })}
-                    className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm"
-                  >
-                    Сдать работу
-                  </button>
+                  <button onClick={() => setSelectedTask({ stageId: (task as any).stageId, task })} className="bg-blue-600 text-white px-5 py-2 rounded-lg">Сдать работу</button>
                 )}
-                {task.status !== 'sent_to_contractor' && task.status !== 'in_progress' && (
-                  <button 
-                    onClick={() => setSelectedTask({ stageId: (task as any).stageId, task })}
-                    className="bg-gray-100 border text-gray-700 px-5 py-2 rounded-lg hover:bg-gray-200 font-medium"
-                  >
-                    Детали
-                  </button>
+                {task.status === 'accepted' && (
+                  <button onClick={() => handleRequestPayment((task as any).stageId, task.id)} className="bg-purple-600 text-white px-5 py-2 rounded-lg">Запросить выплату</button>
                 )}
               </div>
+              
+              
             </div>
           ))}
           {myTasks.length === 0 && <p className="text-center text-gray-500 py-8">У вас пока нет назначенных задач.</p>}
@@ -497,14 +493,27 @@ export default function ProjectDetailsPage() {
                 <p className="text-sm text-gray-400 mt-2">* Учитываются только утвержденные транзакции</p>
               </div>
 
-              <div className="bg-white p-6 rounded-lg shadow-sm border">
-                <h3 className="text-lg font-bold mb-4">Внести поступление</h3>
-                <form onSubmit={handleAddIncome} className="flex flex-col md:flex-row gap-4">
-                  <input type="number" step="0.01" placeholder="Сумма в ₽" required value={incomeAmount} onChange={(e) => setIncomeAmount(e.target.value)} className="flex-1 border p-2 rounded" />
-                  <button type="submit" disabled={isAddingIncome} className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 disabled:opacity-50 font-medium">
-                    {isAddingIncome ? 'Отправка...' : 'Создать транзакцию'}
+                            <div className="bg-white p-6 rounded-lg shadow-sm border mt-4">
+                <h3 className="text-lg font-bold mb-4">Внести расход (Оплата работ/материалов)</h3>
+                <div className="flex gap-4">
+                  <select id="expenseType" className="border p-2 rounded">
+                    <option value="work">Оплата работ</option>
+                    <option value="material">Оплата материалов</option>
+                  </select>
+                  <input type="number" id="expenseAmount" placeholder="Сумма MDL" className="flex-1 border p-2 rounded" />
+                  <button onClick={async () => {
+                    const type = (document.getElementById('expenseType') as HTMLSelectElement).value;
+                    const amount = (document.getElementById('expenseAmount') as HTMLInputElement).value;
+                    if (!amount) return;
+                    await api.post(`/projects/${projectId}/transactions`, {
+                      type: 'expense', category: type, amount: amount, comment: 'Выплата по задаче'
+                    });
+                    alert('Расход создан. Не забудьте его утвердить в таблице ниже.');
+                    fetchTransactions();
+                  }} className="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700">
+                    Списать средства
                   </button>
-                </form>
+                </div>
               </div>
 
               <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
